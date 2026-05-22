@@ -39,20 +39,33 @@ const emptyForm = { firstName:"", lastName:"", title:"Dr.", credential:"", speci
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw7xqt3Ab5h9dlmtds9pHnADCKcGqq2zBhvhCMbLoN-i8NI6AQ-KqHZEVXjlnIOSGKn/exec";
 
 async function fetchFromSheet() {
-  if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === "https://script.google.com/macros/s/AKfycbw7xqt3Ab5h9dlmtds9pHnADCKcGqq2zBhvhCMbLoN-i8NI6AQ-KqHZEVXjlnIOSGKn/exec") return null;
-  try {
-    const res = await fetch(APPS_SCRIPT_URL + "?action=getAll");
-    const data = await res.json();
-    return data.doctors || null;
-  } catch { return null; }
+  if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === "SCRIPT_URL_PLACEHOLDER") return null;
+  return new Promise((resolve) => {
+    const callbackName = "jsonp_cb_" + Math.round(100000 * Math.random());
+    const script = document.createElement("script");
+    let resolved = false;
+    window[callbackName] = function(data) {
+      resolved = true;
+      delete window[callbackName];
+      if (document.body.contains(script)) document.body.removeChild(script);
+      resolve(data.doctors || null);
+    };
+    script.src = APPS_SCRIPT_URL + "?action=getAll&callback=" + callbackName;
+    script.onerror = function() {
+      if (!resolved) { delete window[callbackName]; resolve(null); }
+    };
+    setTimeout(() => { if (!resolved) { delete window[callbackName]; resolve(null); } }, 10000);
+    document.body.appendChild(script);
+  });
 }
 
 async function saveToSheet(action, payload) {
-  if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === "https://script.google.com/macros/s/AKfycbw7xqt3Ab5h9dlmtds9pHnADCKcGqq2zBhvhCMbLoN-i8NI6AQ-KqHZEVXjlnIOSGKn/exec") return false;
+  if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === "SCRIPT_URL_PLACEHOLDER") return false;
   try {
     await fetch(APPS_SCRIPT_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      mode: "no-cors",
+      headers: { "Content-Type": "text/plain" },
       body: JSON.stringify({ action, ...payload })
     });
     return true;
