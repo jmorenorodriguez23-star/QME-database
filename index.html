@@ -40,23 +40,15 @@ const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw7xqt3Ab5h9dlm
 
 async function fetchFromSheet() {
   if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === "SCRIPT_URL_PLACEHOLDER") return null;
-  return new Promise((resolve) => {
-    const callbackName = "jsonp_cb_" + Math.round(100000 * Math.random());
-    const script = document.createElement("script");
-    let resolved = false;
-    window[callbackName] = function(data) {
-      resolved = true;
-      delete window[callbackName];
-      if (document.body.contains(script)) document.body.removeChild(script);
-      resolve(data.doctors || null);
-    };
-    script.src = APPS_SCRIPT_URL + "?action=getAll&callback=" + callbackName;
-    script.onerror = function() {
-      if (!resolved) { delete window[callbackName]; resolve(null); }
-    };
-    setTimeout(() => { if (!resolved) { delete window[callbackName]; resolve(null); } }, 30000);
-    document.body.appendChild(script);
-  });
+  try {
+    const proxyUrl = "https://corsproxy.io/?" + encodeURIComponent(APPS_SCRIPT_URL + "?action=getAll");
+    const res = await fetch(proxyUrl);
+    const data = await res.json();
+    return data.doctors || null;
+  } catch(e) {
+    console.log("Sheet fetch error:", e);
+    return null;
+  }
 }
 
 async function saveToSheet(action, payload) {
