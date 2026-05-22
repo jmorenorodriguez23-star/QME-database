@@ -54,7 +54,7 @@ async function fetchFromSheet() {
     script.onerror = function() {
       if (!resolved) { delete window[callbackName]; resolve(null); }
     };
-    setTimeout(() => { if (!resolved) { delete window[callbackName]; resolve(null); } }, 10000);
+    setTimeout(() => { if (!resolved) { delete window[callbackName]; resolve(null); } }, 30000);
     document.body.appendChild(script);
   });
 }
@@ -93,10 +93,12 @@ function App() {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState("");
   const [usingSheet, setUsingSheet] = useState(false);
+  const [loadingSheet, setLoadingSheet] = useState(true);
   const nextId = useRef(20000);
 
   useEffect(() => {
     async function load() {
+      setLoadingSheet(true);
       // Try Google Sheet first
       const sheetDoctors = await fetchFromSheet();
       if (sheetDoctors && sheetDoctors.length > 0) {
@@ -104,6 +106,7 @@ function App() {
         setUsingSheet(true);
         const maxId = sheetDoctors.reduce((m, d) => Math.max(m, d.id||0), 19999);
         nextId.current = maxId + 1;
+        setLoadingSheet(false);
         return;
       }
       // Fall back to base + local overrides
@@ -117,6 +120,7 @@ function App() {
         nextId.current = maxId + 1;
       }
       setDoctors(merged);
+      setLoadingSheet(false);
     }
     load();
   }, []);
@@ -225,7 +229,9 @@ function App() {
       <div style={{ background:"#1e293b", color:"white", padding:"14px 24px", display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0 }}>
         <div style={{ display:"flex", alignItems:"center", gap:12 }}>
           <div style={{ fontSize:18, fontWeight:700 }}>QME/AME Doctor Database</div>
-          {usingSheet && <span style={{ fontSize:10, background:"#22c55e", color:"white", padding:"2px 8px", borderRadius:20, fontWeight:700 }}>● LIVE</span>}
+          {loadingSheet && <span style={{ fontSize:10, background:"#f59e0b", color:"white", padding:"2px 8px", borderRadius:20, fontWeight:700 }}>⟳ CONNECTING</span>}
+          {!loadingSheet && usingSheet && <span style={{ fontSize:10, background:"#22c55e", color:"white", padding:"2px 8px", borderRadius:20, fontWeight:700 }}>● LIVE</span>}
+          {!loadingSheet && !usingSheet && <span style={{ fontSize:10, background:"#94a3b8", color:"white", padding:"2px 8px", borderRadius:20, fontWeight:700 }}>● LOCAL</span>}
         </div>
         <button onClick={() => { setForm(emptyForm); setModal("add"); }}
           style={{ background:"#3b82f6", color:"white", border:"none", borderRadius:8, padding:"8px 16px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
