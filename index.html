@@ -39,16 +39,7 @@ const emptyForm = { firstName:"", lastName:"", title:"Dr.", credential:"", speci
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw7xqt3Ab5h9dlmtds9pHnADCKcGqq2zBhvhCMbLoN-i8NI6AQ-KqHZEVXjlnIOSGKn/exec";
 
 async function fetchFromSheet() {
-  if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === "SCRIPT_URL_PLACEHOLDER") return null;
-  try {
-    const proxyUrl = "https://corsproxy.io/?" + encodeURIComponent(APPS_SCRIPT_URL + "?action=getAll");
-    const res = await fetch(proxyUrl);
-    const data = await res.json();
-    return data.doctors || null;
-  } catch(e) {
-    console.log("Sheet fetch error:", e);
-    return null;
-  }
+  return null; // Using local storage mode
 }
 
 async function saveToSheet(action, payload) {
@@ -70,6 +61,44 @@ const local = {
   set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
 };
 
+
+// ── Export updated index.html with all current data baked in ──
+async function exportUpdatedIndex() {
+  // Get current doctors from local storage overrides and additions
+  let merged = [...BASE_DOCTORS];
+  try {
+    const overrides = JSON.parse(localStorage.getItem("qme_overrides") || "{}");
+    merged = merged.map(d => overrides[d.id] ? { ...d, ...overrides[d.id] } : d);
+  } catch {}
+  try {
+    const additions = JSON.parse(localStorage.getItem("qme_additions") || "[]");
+    merged = [...merged, ...additions];
+  } catch {}
+
+  // Fetch current index.html from GitHub
+  try {
+    const res = await fetch(window.location.href);
+    let indexHtml = await res.text();
+
+    // Replace BASE_DOCTORS with updated data
+    const newDoctorsLine = "const BASE_DOCTORS = " + JSON.stringify(merged, null, 0) + ";";
+    indexHtml = indexHtml.replace(/const BASE_DOCTORS = \[[\s\S]*?\];/, newDoctorsLine);
+
+    // Download the updated file
+    const blob = new Blob([indexHtml], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "index.html";
+    a.click();
+    URL.revokeObjectURL(url);
+    return true;
+  } catch(e) {
+    console.error("Export failed:", e);
+    return false;
+  }
+}
+
 function App() {
   const [doctors, setDoctors] = useState([]);
   const [search, setSearch] = useState("");
@@ -86,6 +115,7 @@ function App() {
   const [toast, setToast] = useState("");
   const [usingSheet, setUsingSheet] = useState(false);
   const [loadingSheet, setLoadingSheet] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const nextId = useRef(20000);
 
   useEffect(() => {
@@ -182,6 +212,14 @@ function App() {
     return matchSearch && matchRating && matchAME;
   });
 
+  const handleExport = async () => {
+    setExporting(true);
+    showToast("Preparing export...");
+    const ok = await exportUpdatedIndex();
+    if (!ok) showToast("Export failed. Try again.");
+    setExporting(false);
+  };
+
   const handleSave = () => {
     if (!form.lastName.trim()) { showToast("Last name is required."); return; }
     const normalized = { ...form, firstName: form.firstName.trim(), lastName: form.lastName.trim() };
@@ -221,14 +259,18 @@ function App() {
       <div style={{ background:"#1e293b", color:"white", padding:"14px 24px", display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0 }}>
         <div style={{ display:"flex", alignItems:"center", gap:12 }}>
           <div style={{ fontSize:18, fontWeight:700 }}>QME/AME Doctor Database</div>
-          {loadingSheet && <span style={{ fontSize:10, background:"#f59e0b", color:"white", padding:"2px 8px", borderRadius:20, fontWeight:700 }}>⟳ CONNECTING</span>}
-          {!loadingSheet && usingSheet && <span style={{ fontSize:10, background:"#22c55e", color:"white", padding:"2px 8px", borderRadius:20, fontWeight:700 }}>● LIVE</span>}
-          {!loadingSheet && !usingSheet && <span style={{ fontSize:10, background:"#94a3b8", color:"white", padding:"2px 8px", borderRadius:20, fontWeight:700 }}>● LOCAL</span>}
+          <span style={{ fontSize:10, background:"#94a3b8", color:"white", padding:"2px 8px", borderRadius:20, fontWeight:700 }}>● LOCAL</span>
         </div>
-        <button onClick={() => { setForm(emptyForm); setModal("add"); }}
-          style={{ background:"#3b82f6", color:"white", border:"none", borderRadius:8, padding:"8px 16px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
-          + Add Doctor
-        </button>
+        <div style={{ display:"flex", gap:8 }}>
+          <button onClick={handleExport} disabled={exporting}
+            style={{ background:"#0f766e", color:"white", border:"none", borderRadius:8, padding:"8px 16px", fontSize:13, fontWeight:600, cursor:"pointer", opacity:exporting?0.7:1 }}>
+            {exporting ? "Exporting..." : "⬇ Export"}
+          </button>
+          <button onClick={() => { setForm(emptyForm); setModal("add"); }}
+            style={{ background:"#3b82f6", color:"white", border:"none", borderRadius:8, padding:"8px 16px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
+            + Add Doctor
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
